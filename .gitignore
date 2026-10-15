@@ -1,0 +1,19 @@
+.env
+.venv/
+__pycache__/
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local backup files
+*.bak
+
+# AWS credentials
+.aws/
