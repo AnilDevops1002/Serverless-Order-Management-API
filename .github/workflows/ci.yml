@@ -31,10 +31,8 @@ jobs:
           pip install opentelemetry-api opentelemetry-sdk
           pip install opentelemetry-exporter-otlp-proto-http
 
-      - name: Run unit tests
+            - name: Run unit tests
         env:
-          GRAFANA_OTLP_ENDPOINT: https://localhost/otlp
-          GRAFANA_INSTANCE_ID: ci-test
-          GRAFANA_API_TOKEN: ci-test
+          TELEMETRY_ENABLED: "false"
         run: |
           python -m pytest -v

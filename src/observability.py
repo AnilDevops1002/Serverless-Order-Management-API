@@ -1,7 +1,6 @@
 
 import os
 import base64
-import logging
 
 from dotenv import load_dotenv
 
@@ -23,25 +22,9 @@ from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
-
-endpoint = os.getenv("GRAFANA_OTLP_ENDPOINT", "").rstrip("/")
-instance_id = os.getenv("GRAFANA_INSTANCE_ID", "")
-api_token = os.getenv("GRAFANA_API_TOKEN", "")
-
-if not all([endpoint, instance_id, api_token]):
-    raise RuntimeError(
-        "Missing Grafana Cloud environment variables"
-    )
-
-credentials = f"{instance_id}:{api_token}"
-encoded_credentials = base64.b64encode(
-    credentials.encode("utf-8")
-).decode("utf-8")
-
-headers = {
-    "Authorization": f"Basic {encoded_credentials}"
-}
+TELEMETRY_ENABLED = (
+    os.getenv("TELEMETRY_ENABLED", "true").lower() == "true"
+)
 
 resource = Resource.create({
     "service.name": "devops-lambda-assignment",
@@ -50,35 +33,57 @@ resource = Resource.create({
     ),
 })
 
-# Traces
-trace_exporter = OTLPSpanExporter(
-    endpoint=f"{endpoint}/v1/traces",
-    headers=headers,
-    timeout=10,
-)
-
 trace_provider = TracerProvider(resource=resource)
-trace_provider.add_span_processor(
-    BatchSpanProcessor(trace_exporter)
-)
+meter_provider = None
+
+if TELEMETRY_ENABLED:
+    endpoint = os.getenv("GRAFANA_OTLP_ENDPOINT", "").rstrip("/")
+    instance_id = os.getenv("GRAFANA_INSTANCE_ID", "")
+    api_token = os.getenv("GRAFANA_API_TOKEN", "")
+
+    if not all([endpoint, instance_id, api_token]):
+        raise RuntimeError(
+            "Missing Grafana Cloud environment variables"
+        )
+
+    credentials = f"{instance_id}:{api_token}"
+    encoded_credentials = base64.b64encode(
+        credentials.encode("utf-8")
+    ).decode("utf-8")
+
+    headers = {
+        "Authorization": f"Basic {encoded_credentials}"
+    }
+
+    trace_exporter = OTLPSpanExporter(
+        endpoint=f"{endpoint}/v1/traces",
+        headers=headers,
+        timeout=10,
+    )
+
+    trace_provider.add_span_processor(
+        BatchSpanProcessor(trace_exporter)
+    )
+
+    metric_exporter = OTLPMetricExporter(
+        endpoint=f"{endpoint}/v1/metrics",
+        headers=headers,
+        timeout=10,
+    )
+
+    metric_reader = PeriodicExportingMetricReader(
+        metric_exporter,
+        export_interval_millis=10000,
+    )
+
+    meter_provider = MeterProvider(
+        resource=resource,
+        metric_readers=[metric_reader],
+    )
+else:
+    meter_provider = MeterProvider(resource=resource)
+
 trace.set_tracer_provider(trace_provider)
-
-# Metrics
-metric_exporter = OTLPMetricExporter(
-    endpoint=f"{endpoint}/v1/metrics",
-    headers=headers,
-    timeout=10,
-)
-
-metric_reader = PeriodicExportingMetricReader(
-    metric_exporter,
-    export_interval_millis=10000,
-)
-
-meter_provider = MeterProvider(
-    resource=resource,
-    metric_readers=[metric_reader],
-)
 metrics.set_meter_provider(meter_provider)
 
 tracer = trace.get_tracer("order-api")
@@ -119,8 +124,11 @@ def record_request(method, path, status_code, duration_ms):
 
 
 def flush_telemetry():
-    """Send pending traces and metrics before process exits."""
+    if not TELEMETRY_ENABLED:
+        return True
+
     traces_ok = trace_provider.force_flush(timeout_millis=15000)
     metrics_ok = meter_provider.force_flush(timeout_millis=15000)
+
     return traces_ok and metrics_ok
 
