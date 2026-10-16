@@ -34,3 +34,9 @@ override.tf.json
 
 # Lambda build artifacts
 build/
+
+# Test coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
