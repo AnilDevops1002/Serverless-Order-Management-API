@@ -1,0 +1,80 @@
+name: Deploy Order API to GCP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: order-api-gcp-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Run automated tests
+        env:
+          TELEMETRY_ENABLED: "false"
+        run: |
+          python -m pytest tests/ -v
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/127867074951/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
+          service_account: github-actions-deployer@project-410d49a2-c36e-4d11-8aa.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t asia-south1-docker.pkg.dev/project-410d49a2-c36e-4d11-8aa/order-api-repo/order-api:${{ github.sha }} \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            asia-south1-docker.pkg.dev/project-410d49a2-c36e-4d11-8aa/order-api-repo/order-api:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy order-api \
+            --image asia-south1-docker.pkg.dev/project-410d49a2-c36e-4d11-8aa/order-api-repo/order-api:${{ github.sha }} \
+            --region asia-south1 \
+            --project project-410d49a2-c36e-4d11-8aa \
+            --platform managed \
+            --quiet
+
+      - name: Verify deployment
+        run: |
+          SERVICE_URL=$(gcloud run services describe order-api \
+            --region asia-south1 \
+            --project project-410d49a2-c36e-4d11-8aa \
+            --format='value(status.url)')
+
+          curl --fail --show-error --retry 5 \
+            --retry-delay 5 "${SERVICE_URL}/health"
