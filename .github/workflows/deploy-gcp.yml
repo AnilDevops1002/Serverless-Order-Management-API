@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -37,13 +37,13 @@ jobs:
           python -m pytest tests/ -v
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/127867074951/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
           service_account: github-actions-deployer@project-410d49a2-c36e-4d11-8aa.iam.gserviceaccount.com
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker authentication
         run: |
