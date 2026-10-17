@@ -1,14 +1,16 @@
 resource "google_cloud_run_v2_service" "order_api" {
-  name                = "order-api"
-  location            = "asia-south1"
-  project             = "project-410d49a2-c36e-4d11-8aa"
-  client              = "gcloud"
-  client_version      = "587.0.0"
+  name     = "order-api"
+  location = "asia-south1"
+  project  = "project-410d49a2-c36e-4d11-8aa"
+  client   = "gcloud"
+
   deletion_protection = true
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].image
+      template[0].containers[0].image,
+      client_version,
+      client_version
     ]
   }
   ingress = "INGRESS_TRAFFIC_ALL"
